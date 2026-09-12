@@ -67,3 +67,23 @@ def get_current_user_info(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
+
+@router.get("/storage_status")
+async def get_storage_status():
+    import os
+    session = os.getenv("SESSION_STRING")
+    api_id = os.getenv("TELEGRAM_API_ID")
+    api_hash = os.getenv("TELEGRAM_API_HASH")
+    cid = os.getenv("CID")
+
+    clean_session = session.strip().strip("'\"") if session else ""
+    return {
+        "SESSION_STRING_set": bool(clean_session),
+        "SESSION_STRING_length": len(clean_session),
+        "SESSION_STRING_prefix": clean_session[:6] if clean_session else None,
+        "TELEGRAM_API_ID_set": bool(api_id),
+        "TELEGRAM_API_HASH_set": bool(api_hash),
+        "CID_set": bool(cid),
+        "CID_value": cid.strip().strip("'\"") if cid else None,
+    }

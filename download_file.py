@@ -1,4 +1,5 @@
 import boto3
+from botocore.client import Config
 import typer
 
 
@@ -16,6 +17,7 @@ def main(
         aws_secret_access_key=secret_key,
         endpoint_url=s3_url,
         region_name="us-east-1",
+        config=Config(s3={"addressing_style": "path"}),
     )
 
     s3.download_file(bucket_name, input_path, output_path)

@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
-from starlette.status import HTTP_403_FORBIDDEN, HTTP_404_NOT_FOUND
+from starlette.status import HTTP_404_NOT_FOUND
 
 from app.crud.blob import crud_create_blob, crud_get_all_blobs
 from app.crud.bucket import crud_get_bucket_by_name
 from app.db.mongodb import get_database
 from app.models.blob import BlobFilterParams, BlobInCreate
-from app.s3.utils import aws_sig_verify
+from app.s3.utils import aws_sig_verify, s3_error_response
 from app.storage import storage
 
 router = APIRouter(tags=["S3"])
@@ -24,12 +24,21 @@ async def upload_file(
     bucket = await crud_get_bucket_by_name(db, bucket_name)
 
     if not bucket:
-        return Response(
-            status_code=HTTP_404_NOT_FOUND,
+        return s3_error_response(
+            code="NoSuchBucket",
+            message=f"The specified bucket '{bucket_name}' does not exist.",
+            status_code=404,
+            resource=f"/{bucket_name}/{path}",
         )
 
-    if not await aws_sig_verify(bucket, request):
-        return Response(status_code=HTTP_403_FORBIDDEN)
+    is_valid, error_msg = await aws_sig_verify(bucket, request)
+    if not is_valid:
+        return s3_error_response(
+            code="AccessDenied",
+            message=f"Access Denied: {error_msg}",
+            status_code=403,
+            resource=f"/{bucket_name}/{path}",
+        )
 
     filters = BlobFilterParams(path=path, bucket_name=bucket_name)
 
@@ -66,20 +75,32 @@ async def download_file(
     bucket = await crud_get_bucket_by_name(db, bucket_name)
 
     if not bucket:
-        return Response(
-            status_code=HTTP_404_NOT_FOUND,
+        return s3_error_response(
+            code="NoSuchBucket",
+            message=f"The specified bucket '{bucket_name}' does not exist.",
+            status_code=404,
+            resource=f"/{bucket_name}/{path}",
         )
 
-    if not await aws_sig_verify(bucket, request):
-        return Response(status_code=HTTP_403_FORBIDDEN)
+    is_valid, error_msg = await aws_sig_verify(bucket, request)
+    if not is_valid:
+        return s3_error_response(
+            code="AccessDenied",
+            message=f"Access Denied: {error_msg}",
+            status_code=403,
+            resource=f"/{bucket_name}/{path}",
+        )
 
     filters = BlobFilterParams(path=path, bucket_name=bucket_name)
 
     blobs = await crud_get_all_blobs(db, filters)
 
     if len(blobs) == 0:
-        return Response(
-            status_code=HTTP_404_NOT_FOUND,
+        return s3_error_response(
+            code="NoSuchKey",
+            message=f"The specified key '{path}' does not exist.",
+            status_code=404,
+            resource=f"/{bucket_name}/{path}",
         )
 
     blob = blobs[0]
@@ -118,8 +139,9 @@ async def check_file(
     if not bucket:
         return Response(status_code=HTTP_404_NOT_FOUND)
 
-    if not await aws_sig_verify(bucket, request):
-        return Response(status_code=HTTP_403_FORBIDDEN)
+    is_valid, _ = await aws_sig_verify(bucket, request)
+    if not is_valid:
+        return Response(status_code=403)
 
     filters = BlobFilterParams(path=path, bucket_name=bucket_name)
 

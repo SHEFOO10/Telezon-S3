@@ -1,16 +1,22 @@
 FROM python:3.12-alpine
 
+# Install build dependencies & uv binary
 RUN apk add --no-cache \
     gcc \
     musl-dev \
     python3-dev \
     libffi-dev \
     make
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+WORKDIR /app
 
-COPY . /
+# Install dependencies directly from pyproject.toml
+COPY pyproject.toml .
+RUN uv pip install --system -r pyproject.toml
+
+# Copy application code
+COPY . .
 
 EXPOSE 8000
 

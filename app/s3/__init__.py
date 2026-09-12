@@ -84,11 +84,19 @@ async def download_file(
 
     blob = blobs[0]
 
-    result_file = await storage.get_file(blob.file)
+    try:
+        result_file = await storage.get_file(blob.file)
+    except Exception as e:
+        return Response(status_code=500, content=f"Storage error: {str(e)}")
+
     content_type = blob.content_type or "application/octet-stream"
 
+    async def file_iterator(file_obj, chunk_size=1024 * 1024):
+        while chunk := file_obj.read(chunk_size):
+            yield chunk
+
     return StreamingResponse(
-        result_file,
+        file_iterator(result_file),
         media_type=content_type,
         headers={
             "Content-Length": str(blob.size),

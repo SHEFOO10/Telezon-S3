@@ -14,7 +14,6 @@ if __name__ == "__main__":
         "telegram",
         api_id=TELEGRAM_API_ID,
         api_hash=TELEGRAM_API_HASH,
-        session_string=os.getenv("SESSION_STRING"),
         in_memory=True,
     )
 

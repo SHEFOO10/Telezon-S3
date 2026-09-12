@@ -8,11 +8,20 @@ from app.storage import Storage
 
 class TelegramAccountStorage(Storage):
     def client(self):
+        clean_session = SESSION_STRING.strip().strip("'\"") if SESSION_STRING else None
+        clean_api_id = int(TELEGRAM_API_ID.strip().strip("'\"")) if TELEGRAM_API_ID else None
+        clean_api_hash = TELEGRAM_API_HASH.strip().strip("'\"") if TELEGRAM_API_HASH else None
+
+        if not clean_session:
+            logger.error("SESSION_STRING is missing or empty")
+        else:
+            logger.info("Initializing Telegram client (session length: %d chars)", len(clean_session))
+
         return Client(
             "telegram",
-            api_id=TELEGRAM_API_ID,
-            api_hash=TELEGRAM_API_HASH,
-            session_string=SESSION_STRING,
+            api_id=clean_api_id,
+            api_hash=clean_api_hash,
+            session_string=clean_session,
             in_memory=True,
         )
 
@@ -22,7 +31,8 @@ class TelegramAccountStorage(Storage):
         async with self.client() as app:
             async for _ in app.get_dialogs():
                 pass
-            response = await app.send_document(int(CID), document, file_name=filename)
+            target_cid = int(str(CID).strip().strip("'\""))
+            response = await app.send_document(target_cid, document, file_name=filename)
             return str(response.document.file_id)
 
     async def get_file(self, file_id: str) -> io.BytesIO:

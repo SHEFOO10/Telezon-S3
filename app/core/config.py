@@ -34,10 +34,20 @@ API_KEY = os.getenv("API_KEY")
 
 TOKEN = os.getenv("BOT_TOKEN")
 CID = os.getenv("CID")
+if CID:
+    CID = CID.strip().strip("'\"")
 
 TELEGRAM_API_ID = os.getenv("TELEGRAM_API_ID")
+if TELEGRAM_API_ID:
+    TELEGRAM_API_ID = TELEGRAM_API_ID.strip().strip("'\"")
+
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH")
+if TELEGRAM_API_HASH:
+    TELEGRAM_API_HASH = TELEGRAM_API_HASH.strip().strip("'\"")
+
 SESSION_STRING = os.getenv("SESSION_STRING")
+if SESSION_STRING:
+    SESSION_STRING = SESSION_STRING.strip().strip("'\"")
 
 INITIAL_ADMIN_USER = os.getenv("INITIAL_ADMIN_USER")
 INITIAL_ADMIN_PASSWORD = os.getenv("INITIAL_ADMIN_PASSWORD")

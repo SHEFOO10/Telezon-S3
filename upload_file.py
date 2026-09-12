@@ -15,6 +15,7 @@ def main(
         aws_access_key_id=access_key_id,
         aws_secret_access_key=secret_key,
         endpoint_url=s3_url,
+        region_name="us-east-1",
     )
 
     s3.upload_file(input_path, bucket_name, output_path)

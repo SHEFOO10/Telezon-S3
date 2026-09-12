@@ -8,11 +8,11 @@ load_dotenv()
 logger = uvicorn.logging.logging.getLogger("uvicorn")
 
 
-# ENVIRONMENT = os.getenv("ENVIRONMENT")
-PROJECT_NAME = os.getenv("PROJECT_NAME")
-PORT = int(os.getenv("PORT"))
+PROJECT_NAME = os.getenv("PROJECT_NAME", "Telezon-S3")
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = int(os.getenv("PORT", 8000))
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key")
 
 MONGO_HOST = os.getenv("MONGO_HOST")
 MONGO_PORT = os.getenv("MONGO_PORT")

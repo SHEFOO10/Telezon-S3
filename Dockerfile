@@ -20,4 +20,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["fastapi", "run", "--workers", "4", "app/main.py"]
+CMD ["sh", "-c", "fastapi run --host ${HOST:-0.0.0.0} --port ${PORT:-8000} app/main.py"]

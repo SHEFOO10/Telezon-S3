@@ -2,7 +2,7 @@ from collections.abc import Iterable
 
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
-from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
+from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 
 async def http_error_handler(_, exc: HTTPException) -> JSONResponse:
@@ -19,4 +19,4 @@ async def http_422_error_handler(_, exc: HTTPException) -> JSONResponse:
     else:
         errors["body"].append(exc.detail)
 
-    return JSONResponse({"errors": errors}, status_code=HTTP_422_UNPROCESSABLE_ENTITY)
+    return JSONResponse({"errors": errors}, status_code=HTTP_422_UNPROCESSABLE_CONTENT)

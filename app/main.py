@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.status import HTTP_422_UNPROCESSABLE_ENTITY
+from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 from app.api import router as api_router
 from app.core.config import PROJECT_NAME
@@ -33,7 +33,7 @@ app.add_middleware(
 )
 
 app.add_exception_handler(HTTPException, http_error_handler)
-app.add_exception_handler(HTTP_422_UNPROCESSABLE_ENTITY, http_422_error_handler)
+app.add_exception_handler(HTTP_422_UNPROCESSABLE_CONTENT, http_422_error_handler)
 
 app.include_router(s3_router)
 app.include_router(api_router)

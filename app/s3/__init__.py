@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response, StreamingResponse
+from starlette.responses import Response, StreamingResponse
 from starlette.status import HTTP_403_FORBIDDEN, HTTP_404_NOT_FOUND
 
 from app.crud.blob import crud_create_blob, crud_get_all_blobs
@@ -35,9 +35,6 @@ async def upload_file(
 
     blobs = await crud_get_all_blobs(db, filters)
 
-    blob: BlobInCreate
-    update: bool
-
     if len(blobs) == 0:
         update = False
         blob = BlobInCreate(path=path)
@@ -45,15 +42,18 @@ async def upload_file(
         update = True
         blob = BlobInCreate(**blobs[0].model_dump())
 
-    blob.content_type = request.headers.get("content-type", "")
-    blob.size = request.headers["content-length"]
     body = await request.body()
+    blob.content_type = request.headers.get("content-type", "application/octet-stream")
+    blob.size = int(request.headers.get("content-length", len(body)))
     file_id = await storage.put_file(body, path)
     blob.file = file_id
 
     await crud_create_blob(db, blob, bucket_name, update)
 
-    return Response("")
+    return Response(
+        status_code=200,
+        headers={"ETag": f'"{file_id}"'},
+    )
 
 
 @router.get("/{bucket_name}/{path}")
@@ -85,22 +85,48 @@ async def download_file(
     blob = blobs[0]
 
     result_file = await storage.get_file(blob.file)
+    content_type = blob.content_type or "application/octet-stream"
 
-    return StreamingResponse(result_file, media_type=blob.content_type)
+    return StreamingResponse(
+        result_file,
+        media_type=content_type,
+        headers={
+            "Content-Length": str(blob.size),
+            "Content-Type": content_type,
+            "ETag": f'"{blob.file}"',
+        },
+    )
 
 
 @router.head("/{bucket_name}/{path}")
 async def check_file(
+    request: Request,
     bucket_name: str,
     path: str,
     db: AsyncIOMotorClient = Depends(get_database),
 ):
+    bucket = await crud_get_bucket_by_name(db, bucket_name)
+
+    if not bucket:
+        return Response(status_code=HTTP_404_NOT_FOUND)
+
+    if not await aws_sig_verify(bucket, request):
+        return Response(status_code=HTTP_403_FORBIDDEN)
+
     filters = BlobFilterParams(path=path, bucket_name=bucket_name)
 
     blobs = await crud_get_all_blobs(db, filters)
 
     if len(blobs) > 0:
         blob = blobs[0]
-        return JSONResponse({"ContentLength": blob.size})
+        content_type = blob.content_type or "application/octet-stream"
+        return Response(
+            status_code=200,
+            headers={
+                "Content-Length": str(blob.size),
+                "Content-Type": content_type,
+                "ETag": f'"{blob.file}"',
+            },
+        )
     else:
         return Response(status_code=HTTP_404_NOT_FOUND)

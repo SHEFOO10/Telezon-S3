@@ -19,6 +19,7 @@ dependencies = [
     "python-multipart>=0.0.17",
     "pyrogram>=2.0.106",
     "uvicorn>=0.30.0",
+    "tgcrypto>=1.2.5",
 ]
 
 [dependency-groups]

@@ -4,6 +4,7 @@ from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from starlette.status import HTTP_404_NOT_FOUND
 
+from app.core.config import logger
 from app.crud.blob import crud_create_blob, crud_get_all_blobs
 from app.crud.bucket import crud_get_bucket_by_name
 from app.db.mongodb import get_database
@@ -54,7 +55,18 @@ async def upload_file(
     body = await request.body()
     blob.content_type = request.headers.get("content-type", "application/octet-stream")
     blob.size = int(request.headers.get("content-length", len(body)))
-    file_id = await storage.put_file(body, path)
+
+    try:
+        file_id = await storage.put_file(body, path)
+    except Exception as e:
+        logger.exception("Storage error uploading file '%s': %s", path, e)
+        return s3_error_response(
+            code="InternalError",
+            message=f"Telegram storage upload failed: {str(e)}",
+            status_code=500,
+            resource=f"/{bucket_name}/{path}",
+        )
+
     blob.file = file_id
 
     await crud_create_blob(db, blob, bucket_name, update)
@@ -108,7 +120,13 @@ async def download_file(
     try:
         result_file = await storage.get_file(blob.file)
     except Exception as e:
-        return Response(status_code=500, content=f"Storage error: {str(e)}")
+        logger.exception("Storage error downloading file '%s' (file_id=%s): %s", blob.path, blob.file, e)
+        return s3_error_response(
+            code="InternalError",
+            message=f"Telegram storage download failed: {str(e)}",
+            status_code=500,
+            resource=f"/{bucket_name}/{path}",
+        )
 
     content_type = blob.content_type or "application/octet-stream"
 

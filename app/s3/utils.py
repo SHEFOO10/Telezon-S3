@@ -1,5 +1,6 @@
 from starlette.requests import Request
 
+from app.core.config import logger
 from app.models.bucket import Bucket
 from app.s3.awssig import AWSSigV4Verifier, InvalidSignatureError
 
@@ -8,7 +9,13 @@ async def aws_sig_verify(bucket: Bucket, request: Request):
     body = await request.body()
     headers = dict(**request.headers)
     headers["X-Amz-Date"] = headers.get("x-amz-date", "")
-    path = str(request.url).replace(str(request.base_url), "/")
+    
+    # Handle reverse proxy forwarded host (Render, Cloudflare, Nginx)
+    if "x-forwarded-host" in headers:
+        headers["host"] = headers["x-forwarded-host"]
+
+    # Use exact path component instead of string replacement of base_url
+    path = request.url.path
 
     v = AWSSigV4Verifier(
         request_method=request.method,
@@ -25,6 +32,7 @@ async def aws_sig_verify(bucket: Bucket, request: Request):
         v.verify()
         return True
     except InvalidSignatureError as e:
-        print("Invalid signature: %s", e)
+        logger.warning("Invalid signature for %s %s: %s", request.method, path, e)
     except Exception as e:
-        print("Unable to verify request: %s", e)
+        logger.error("Unable to verify request for %s %s: %s", request.method, path, e)
+    return False

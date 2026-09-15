@@ -42,6 +42,7 @@ project = {
         "owner": 1,
         "created_at": 1,
         "updated_at": 1,
+        "channel_id": 1,
         "size": {"$sum": "$blobs.size"},
     }
 }
@@ -113,23 +114,25 @@ async def crud_update_bucket(
     db: AsyncIOMotorClient, bucket_name: str, bucket: BucketInUpdate
 ) -> BucketInDb:
     simple_bucket = await crud_get_bucket_by_name(db, bucket_name)
+    if not simple_bucket:
+        raise HTTPException(
+            status_code=HTTP_404_NOT_FOUND,
+            detail=f"Bucket {bucket_name} not found",
+        )
+
     data_bucket = BucketInDb(**simple_bucket.model_dump())
 
-    if not data_bucket:
-        raise HTTPException(
-            status_code=HTTP_404_NOT_FOUND,
-            detail=f"Username {bucket_name} not found",
-        )
+    if bucket.owner_username:
+        user_bucket = await crud_get_user_by_username(db, bucket.owner_username)
+        if not user_bucket:
+            raise HTTPException(
+                status_code=HTTP_404_NOT_FOUND,
+                detail=f"Username {bucket.owner_username} not found",
+            )
+        data_bucket.owner_username = bucket.owner_username
 
-    user_bucket = await crud_get_user_by_username(db, bucket.owner_username)
-
-    if not user_bucket:
-        raise HTTPException(
-            status_code=HTTP_404_NOT_FOUND,
-            detail=f"Username {bucket.owner_username} not found",
-        )
-
-    data_bucket.owner_username = bucket.owner_username
+    if bucket.channel_id is not None:
+        data_bucket.channel_id = bucket.channel_id
 
     updated_at = await db[DATABASE_NAME][COLLECTION].update_one(
         {"name": data_bucket.name}, {"$set": data_bucket.model_dump()}

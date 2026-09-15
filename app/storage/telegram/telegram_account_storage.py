@@ -25,13 +25,20 @@ class TelegramAccountStorage(Storage):
             in_memory=True,
         )
 
-    async def put_file(self, file: bytes, filename: str) -> str:
+    async def put_file(
+        self, file: bytes, filename: str, channel_id: str | int | None = None
+    ) -> str:
         document = io.BytesIO(file)
+
+        raw_cid = channel_id if channel_id is not None and str(channel_id).strip() else CID
+        if not raw_cid:
+            raise ValueError("No Telegram Channel ID (CID) specified for bucket or in environment.")
+
+        target_cid = int(str(raw_cid).strip().strip("'\""))
 
         async with self.client() as app:
             async for _ in app.get_dialogs():
                 pass
-            target_cid = int(str(CID).strip().strip("'\""))
             response = await app.send_document(target_cid, document, file_name=filename)
             return str(response.document.file_id)
 

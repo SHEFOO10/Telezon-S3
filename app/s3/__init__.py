@@ -57,7 +57,7 @@ async def upload_file(
     blob.size = int(request.headers.get("content-length", len(body)))
 
     try:
-        file_id = await storage.put_file(body, path)
+        file_id = await storage.put_file(body, path, channel_id=bucket.channel_id)
     except Exception as e:
         logger.exception("Storage error uploading file '%s': %s", path, e)
         return s3_error_response(

@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from motor.motor_asyncio import AsyncIOMotorClient
 from starlette.status import HTTP_400_BAD_REQUEST
 
+from app.api.auth.utils import check_role_admin
 from app.core.config import logger
 from app.core.token import create_access_token, get_current_user
 from app.crud.bucket import crud_create_bucket
@@ -44,7 +45,9 @@ async def login(
 async def signup(
     user: UserInCreate = Body(...),
     db: AsyncIOMotorClient = Depends(get_database),
+    current_user: User = Depends(get_current_user),
 ):
+    check_role_admin(current_user)
     await check_free_username_and_email(db, user.username, user.email)
     new_user = await crud_create_user(db, user)
 
@@ -55,7 +58,7 @@ async def signup(
             name=user.username,
             owner_username=user.username,
         )
-        await crud_create_bucket(db, bucket, User(**new_user.model_dump()))
+        await crud_create_bucket(db, bucket, current_user)
     except Exception as e:
         logger.error("Error creating bucket: %s", e)
 

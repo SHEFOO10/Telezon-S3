@@ -371,8 +371,12 @@ class AWSSigV4Verifier(object):
         signed_headers = self.signed_headers
         header_lines = "".join(["%s:%s\n" % item for item in iteritems(signed_headers)])
         header_keys = ";".join([key for key in iterkeys(self.signed_headers)])
-        # Payload not signed if transfered securely via HTTPS
-        if self.headers.get("x-amz-content-sha256") == "UNSIGNED-PAYLOAD":
+        # Payload not signed if transfered securely via HTTPS or using presigned URL
+        if (
+            self.headers.get("x-amz-content-sha256") == "UNSIGNED-PAYLOAD"
+            or _x_amz_signature in self.query_parameters
+            or _x_amz_algorithm in self.query_parameters
+        ):
             hashed_payload = "UNSIGNED-PAYLOAD"
         else:
             hashed_payload = sha256(self.body).hexdigest()

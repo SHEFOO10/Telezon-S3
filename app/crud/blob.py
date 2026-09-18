@@ -1,4 +1,5 @@
-from typing import List
+import re
+from typing import List, Optional, Set, Tuple
 
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -88,4 +89,66 @@ async def crud_delete_blob(
         {"path": path, "bucket_name": bucket_name}
     )
     return result.deleted_count > 0
+
+
+async def crud_list_blobs_v2(
+    db: AsyncIOMotorClient,
+    bucket_name: str,
+    prefix: str = "",
+    delimiter: str = "",
+    max_keys: int = 1000,
+    continuation_token: Optional[str] = None,
+    start_after: Optional[str] = None,
+) -> Tuple[List[Blob], List[str], bool, Optional[str]]:
+    base_query = {"bucket_name": bucket_name}
+
+    if prefix:
+        base_query["path"] = {"$regex": f"^{re.escape(prefix)}"}
+
+    start_key = continuation_token or start_after
+    if start_key:
+        if "path" in base_query and isinstance(base_query["path"], dict):
+            base_query["path"]["$gt"] = start_key
+        else:
+            base_query["path"] = {"$gt": start_key}
+
+    pipeline = [
+        {"$match": base_query},
+        {"$sort": {"path": 1}},
+        {"$limit": max_keys + 1},
+        aggregate_bucket,
+        aggregate_owner,
+        {"$unwind": {"path": "$bucket"}},
+        {"$unwind": {"path": "$owner"}},
+    ]
+
+    cursor = db[DATABASE_NAME][COLLECTION].aggregate(pipeline)
+    raw_blobs: List[Blob] = []
+    async for row in cursor:
+        raw_blobs.append(Blob(**row))
+
+    is_truncated = len(raw_blobs) > max_keys
+    if is_truncated:
+        raw_blobs = raw_blobs[:max_keys]
+        next_token = raw_blobs[-1].path if raw_blobs else None
+    else:
+        next_token = None
+
+    matched_blobs: List[Blob] = []
+    common_prefixes_set: Set[str] = set()
+
+    for blob in raw_blobs:
+        if delimiter:
+            rel_path = blob.path[len(prefix):] if blob.path.startswith(prefix) else blob.path
+            if delimiter in rel_path:
+                idx = rel_path.find(delimiter)
+                cp = prefix + rel_path[: idx + len(delimiter)]
+                common_prefixes_set.add(cp)
+            else:
+                matched_blobs.append(blob)
+        else:
+            matched_blobs.append(blob)
+
+    return matched_blobs, sorted(list(common_prefixes_set)), is_truncated, next_token
+
 

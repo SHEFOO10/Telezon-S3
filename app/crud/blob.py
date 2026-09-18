@@ -72,9 +72,20 @@ async def crud_create_blob(
         data_blob.updated_at = ObjectId(row.inserted_id).generation_time
     else:
         updated_at = await db[DATABASE_NAME][COLLECTION].update_one(
-            {"path": data_blob.path}, {"$set": data_blob.model_dump()}
+            {"path": data_blob.path, "bucket_name": bucket_name},
+            {"$set": data_blob.model_dump()},
         )
 
         data_blob.updated_at = updated_at
 
     return data_blob
+
+
+async def crud_delete_blob(
+    db: AsyncIOMotorClient, path: str, bucket_name: str
+) -> bool:
+    result = await db[DATABASE_NAME][COLLECTION].delete_many(
+        {"path": path, "bucket_name": bucket_name}
+    )
+    return result.deleted_count > 0
+

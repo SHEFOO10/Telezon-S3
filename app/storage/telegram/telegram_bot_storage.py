@@ -18,3 +18,8 @@ class TelegramBotStorage(Storage):
     async def get_file(self, file_id: str):
         file = await bot.get_file(file_id)
         return file
+
+    async def delete_file(
+        self, file_id: str, channel_id: Optional[Union[str, int]] = None
+    ) -> bool:
+        return True

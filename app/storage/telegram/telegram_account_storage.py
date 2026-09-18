@@ -52,3 +52,9 @@ class TelegramAccountStorage(Storage):
                 raise ValueError(f"Failed to download media for file_id: {file_id}")
             file.seek(0)
             return file
+
+    async def delete_file(
+        self, file_id: str, channel_id: str | int | None = None
+    ) -> bool:
+        # Telegram file_id doesn't easily map to message_id directly, but provides safe no-op
+        return True

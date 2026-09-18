@@ -10,3 +10,8 @@ class Storage(ABC):
 
     async def get_file(self, file_id: str):
         pass
+
+    async def delete_file(
+        self, file_id: str, channel_id: Optional[Union[str, int]] = None
+    ):
+        pass

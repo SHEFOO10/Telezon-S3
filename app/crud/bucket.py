@@ -141,3 +141,8 @@ async def crud_update_bucket(
     data_bucket.updated_at = updated_at
 
     return BucketInDb(**data_bucket.model_dump())
+
+
+async def crud_delete_bucket(db: AsyncIOMotorClient, bucket_name: str) -> bool:
+    result = await db[DATABASE_NAME][COLLECTION].delete_one({"name": bucket_name})
+    return result.deleted_count > 0

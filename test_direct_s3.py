@@ -212,6 +212,103 @@ def presign(
             print(f"Response Body: {r.text}")
 
 
+@app.command()
+def list_buckets(
+    s3_url: str = typer.Argument(..., help="Render app URL (e.g. https://telezon-s3.onrender.com)"),
+    access_key_id: str = typer.Option(..., prompt=True),
+    secret_key: str = typer.Option(..., prompt=True),
+):
+    url = s3_url.rstrip("/")
+    parsed = urlparse(url)
+    host = parsed.netloc
+
+    target_url = f"{url}/"
+    headers = {"Host": host}
+    credentials = Credentials(access_key_id, secret_key)
+    req = AWSRequest(method="GET", url=target_url, headers=headers)
+    SigV4Auth(credentials, "s3", "us-east-1").add_auth(req)
+
+    with httpx.Client(timeout=30.0) as client:
+        r = client.get(target_url, headers=dict(req.headers))
+        print(f"\nResponse Status: {r.status_code}")
+        print(f"Response Body:\n{r.text}")
+
+
+@app.command()
+def create_bucket(
+    s3_url: str = typer.Argument(..., help="Render app URL (e.g. https://telezon-s3.onrender.com)"),
+    access_key_id: str = typer.Option(..., prompt=True),
+    secret_key: str = typer.Option(..., prompt=True),
+    bucket_name: str = typer.Option(..., prompt=True),
+):
+    url = s3_url.rstrip("/")
+    parsed = urlparse(url)
+    host = parsed.netloc
+
+    target_url = f"{url}/{bucket_name}"
+    headers = {"Host": host}
+    credentials = Credentials(access_key_id, secret_key)
+    req = AWSRequest(method="PUT", url=target_url, headers=headers)
+    SigV4Auth(credentials, "s3", "us-east-1").add_auth(req)
+
+    with httpx.Client(timeout=30.0) as client:
+        r = client.put(target_url, headers=dict(req.headers))
+        print(f"\nResponse Status: {r.status_code}")
+        print(f"Response Headers: {dict(r.headers)}")
+
+
+@app.command()
+def delete_bucket(
+    s3_url: str = typer.Argument(..., help="Render app URL (e.g. https://telezon-s3.onrender.com)"),
+    access_key_id: str = typer.Option(..., prompt=True),
+    secret_key: str = typer.Option(..., prompt=True),
+    bucket_name: str = typer.Option(..., prompt=True),
+):
+    url = s3_url.rstrip("/")
+    parsed = urlparse(url)
+    host = parsed.netloc
+
+    target_url = f"{url}/{bucket_name}"
+    headers = {"Host": host}
+    credentials = Credentials(access_key_id, secret_key)
+    req = AWSRequest(method="DELETE", url=target_url, headers=headers)
+    SigV4Auth(credentials, "s3", "us-east-1").add_auth(req)
+
+    with httpx.Client(timeout=30.0) as client:
+        r = client.delete(target_url, headers=dict(req.headers))
+        print(f"\nResponse Status: {r.status_code}")
+        print(f"Response Body:\n{r.text}")
+
+
+@app.command()
+def copy(
+    s3_url: str = typer.Argument(..., help="Render app URL (e.g. https://telezon-s3.onrender.com)"),
+    access_key_id: str = typer.Option(..., prompt=True),
+    secret_key: str = typer.Option(..., prompt=True),
+    source_bucket: str = typer.Option(..., prompt=True),
+    source_path: str = typer.Option(..., prompt=True),
+    dest_bucket: str = typer.Option(..., prompt=True),
+    dest_path: str = typer.Option(..., prompt=True),
+):
+    url = s3_url.rstrip("/")
+    parsed = urlparse(url)
+    host = parsed.netloc
+
+    target_url = f"{url}/{dest_bucket}/{dest_path}"
+    headers = {
+        "Host": host,
+        "x-amz-copy-source": f"/{source_bucket}/{source_path}",
+    }
+    credentials = Credentials(access_key_id, secret_key)
+    req = AWSRequest(method="PUT", url=target_url, headers=headers)
+    SigV4Auth(credentials, "s3", "us-east-1").add_auth(req)
+
+    with httpx.Client(timeout=30.0) as client:
+        r = client.put(target_url, headers=dict(req.headers))
+        print(f"\nResponse Status: {r.status_code}")
+        print(f"Response Body:\n{r.text}")
+
+
 if __name__ == "__main__":
     app()
 

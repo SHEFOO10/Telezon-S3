@@ -11,13 +11,18 @@ from app.core.config import PROJECT_NAME
 from app.core.errors import http_422_error_handler, http_error_handler
 from app.db.mongodb import close_mongodb_connection, connect_to_mongodb
 from app.s3 import router as s3_router
+from app.storage import storage
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Connect to MongoDB
     await connect_to_mongodb()
+    # Initialize storage client session
+    await storage.start()
     yield
+    # Disconnect storage client
+    await storage.stop()
     # Disconnect from MongoDB
     await close_mongodb_connection()
 

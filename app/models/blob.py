@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 from app.models.bucket import BucketBase
@@ -17,6 +17,8 @@ class BlobBase(BaseModel):
     path: str
     file: str = ""
     parts: List[str] = []
+    message_id: Optional[int] = None
+    message_ids: List[int] = []
     content_type: str = ""
     size: int = 0
 

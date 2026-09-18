@@ -9,7 +9,7 @@ from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from starlette.status import HTTP_404_NOT_FOUND
 
-from app.core.config import logger
+from app.core.config import MULTIPART_MODE, logger
 from app.crud.blob import (
     crud_create_blob,
     crud_delete_blob,
@@ -153,18 +153,41 @@ async def upload_file(
         body = await request.body()
         etag = hashlib.md5(body).hexdigest()
 
-        # Save part data to a temporary file
-        temp_dir = tempfile.gettempdir()
-        part_file_path = os.path.join(temp_dir, f"telezon_{upload_id}_{part_number}.part")
-        with open(part_file_path, "wb") as f:
-            f.write(body)
+        if MULTIPART_MODE == "assembled":
+            # 1A. Assembled mode: Save part temporarily to disk
+            temp_dir = tempfile.gettempdir()
+            part_file_path = os.path.join(temp_dir, f"telezon_{upload_id}_{part_number}.part")
+            with open(part_file_path, "wb") as f:
+                f.write(body)
 
-        part_data = UploadPart(
-            part_number=part_number,
-            etag=etag,
-            size=len(body),
-            data_path=part_file_path,
-        )
+            part_data = UploadPart(
+                part_number=part_number,
+                etag=etag,
+                size=len(body),
+                data_path=part_file_path,
+            )
+        else:
+            # 1B. Diskless mode (default): Upload part directly to Telegram storage
+            try:
+                part_file_id = await storage.put_file(
+                    body, f"{path}.part{part_number}", channel_id=bucket.channel_id
+                )
+            except Exception as e:
+                logger.exception("Storage error uploading part %d for '%s': %s", part_number, path, e)
+                return s3_error_response(
+                    code="InternalError",
+                    message=f"Telegram storage upload failed: {str(e)}",
+                    status_code=500,
+                    resource=f"/{bucket_name}/{path}",
+                )
+
+            part_data = UploadPart(
+                part_number=part_number,
+                etag=etag,
+                size=len(body),
+                file_id=part_file_id,
+            )
+
         await crud_save_part(db, bucket_name, path, upload_id, part_data)
 
         return Response(status_code=200, headers={"ETag": f'"{etag}"'})
@@ -183,6 +206,7 @@ async def upload_file(
     body = await request.body()
     blob.content_type = request.headers.get("content-type", "application/octet-stream")
     blob.size = int(request.headers.get("content-length", len(body)))
+    blob.parts = []
 
     try:
         file_id = await storage.put_file(body, path, channel_id=bucket.channel_id)
@@ -258,6 +282,30 @@ async def download_file(
         )
 
     blob = blobs[0]
+    content_type = blob.content_type or "application/octet-stream"
+
+    # If multipart upload was stored as multiple Telegram part files:
+    if blob.parts and len(blob.parts) > 0:
+        async def multi_parts_iterator(part_ids, chunk_size=1024 * 1024):
+            for pid in part_ids:
+                try:
+                    part_file = await storage.get_file(pid)
+                    while chunk := part_file.read(chunk_size):
+                        yield chunk
+                except Exception as e:
+                    logger.exception("Error streaming part %s: %s", pid, e)
+
+        return StreamingResponse(
+            multi_parts_iterator(blob.parts),
+            media_type=content_type,
+            headers={
+                "Content-Length": str(blob.size),
+                "Content-Type": content_type,
+                "ETag": f'"{blob.file}"',
+            },
+        )
+
+    # Single Telegram file
     try:
         result_file = await storage.get_file(blob.file)
     except Exception as e:
@@ -268,8 +316,6 @@ async def download_file(
             status_code=500,
             resource=f"/{bucket_name}/{path}",
         )
-
-    content_type = blob.content_type or "application/octet-stream"
 
     async def file_iterator(file_obj, chunk_size=1024 * 1024):
         while chunk := file_obj.read(chunk_size):
@@ -284,6 +330,7 @@ async def download_file(
             "ETag": f'"{blob.file}"',
         },
     )
+
 
 
 @router.head("/{bucket_name}/{path:path}")
@@ -356,10 +403,12 @@ async def delete_file(
 
     if len(blobs) > 0:
         blob = blobs[0]
-        try:
-            await storage.delete_file(blob.file, channel_id=bucket.channel_id)
-        except Exception as e:
-            logger.warning("Storage warning deleting file '%s': %s", path, e)
+        files_to_delete = blob.parts if blob.parts and len(blob.parts) > 0 else ([blob.file] if blob.file else [])
+        for fid in files_to_delete:
+            try:
+                await storage.delete_file(fid, channel_id=bucket.channel_id)
+            except Exception as e:
+                logger.warning("Storage warning deleting file '%s' (%s): %s", path, fid, e)
 
         await crud_delete_blob(db, path=path, bucket_name=bucket_name)
 
@@ -432,24 +481,45 @@ async def post_object_operations(
                 resource=f"/{bucket_name}/{path}",
             )
 
-        # Concatenate parts
-        combined_bytes = bytearray()
-        for p in sorted_parts:
-            if p.data_path and os.path.exists(p.data_path):
-                with open(p.data_path, "rb") as f:
-                    combined_bytes.extend(f.read())
+        if MULTIPART_MODE == "assembled":
+            # 2A. Assembled mode: Merge parts on disk and upload as 1 Telegram document
+            temp_dir = tempfile.gettempdir()
+            combined_file_path = os.path.join(temp_dir, f"telezon_assembled_{upload_id}.tmp")
+            total_size = 0
+            with open(combined_file_path, "wb") as outfile:
+                for p in sorted_parts:
+                    if p.data_path and os.path.exists(p.data_path):
+                        with open(p.data_path, "rb") as infile:
+                            while chunk := infile.read(8 * 1024 * 1024):
+                                outfile.write(chunk)
+                                total_size += len(chunk)
 
-        # Upload assembled file to Telegram storage
-        try:
-            file_id = await storage.put_file(bytes(combined_bytes), path, channel_id=bucket.channel_id)
-        except Exception as e:
-            logger.exception("Storage error completing multipart upload for '%s': %s", path, e)
-            return s3_error_response(
-                code="InternalError",
-                message=f"Telegram storage upload failed: {str(e)}",
-                status_code=500,
-                resource=f"/{bucket_name}/{path}",
-            )
+            try:
+                primary_file_id = await storage.put_file(
+                    combined_file_path, path, channel_id=bucket.channel_id
+                )
+            except Exception as e:
+                logger.exception("Storage error completing assembled upload for '%s': %s", path, e)
+                return s3_error_response(
+                    code="InternalError",
+                    message=f"Telegram storage upload failed: {str(e)}",
+                    status_code=500,
+                    resource=f"/{bucket_name}/{path}",
+                )
+            finally:
+                if os.path.exists(combined_file_path):
+                    try:
+                        os.remove(combined_file_path)
+                    except Exception:
+                        pass
+            part_file_ids = []
+            combined_etag = primary_file_id
+        else:
+            # 2B. Diskless mode (default): Save parts manifest in MongoDB
+            total_size = sum(p.size for p in sorted_parts)
+            part_file_ids = [p.file_id for p in sorted_parts]
+            primary_file_id = part_file_ids[0] if part_file_ids else ""
+            combined_etag = f"{hashlib.md5(''.join(p.etag for p in sorted_parts).encode()).hexdigest()}-{len(sorted_parts)}"
 
         # Update Blob in MongoDB
         filters = BlobFilterParams(path=path, bucket_name=bucket_name)
@@ -458,18 +528,20 @@ async def post_object_operations(
 
         blob_in = BlobInCreate(
             path=path,
-            file=file_id,
+            file=primary_file_id,
+            parts=part_file_ids,
             content_type=upload.content_type,
-            size=len(combined_bytes),
+            size=total_size,
         )
         await crud_create_blob(db, blob_in, bucket_name, update)
 
-        # Clean up multipart temporary files and DB record
+        # Clean up multipart DB record (and temp disk files if in assembled mode)
         await crud_delete_multipart_upload(db, bucket_name, path, upload_id)
 
         location = f"{request.url.scheme}://{request.url.netloc}/{bucket_name}/{path}"
-        xml_content = build_complete_multipart_upload_result_xml(bucket_name, path, location, file_id)
+        xml_content = build_complete_multipart_upload_result_xml(bucket_name, path, location, combined_etag)
         return Response(content=xml_content, status_code=200, media_type="application/xml")
+
 
     return s3_error_response(
         code="NotImplemented",

@@ -1,3 +1,4 @@
+from typing import List
 from pydantic import BaseModel
 
 from app.models.bucket import BucketBase
@@ -15,6 +16,7 @@ class BlobFilterParams(BaseModel):
 class BlobBase(BaseModel):
     path: str
     file: str = ""
+    parts: List[str] = []
     content_type: str = ""
     size: int = 0
 

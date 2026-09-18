@@ -47,7 +47,6 @@ async def crud_delete_multipart_upload(
 ) -> bool:
     upload = await crud_get_multipart_upload(db, bucket_name, key, upload_id)
     if upload:
-        # Clean up any temporary part files stored on disk
         for p in upload.parts:
             if p.data_path and os.path.exists(p.data_path):
                 try:
@@ -59,3 +58,5 @@ async def crud_delete_multipart_upload(
         {"bucket_name": bucket_name, "key": key, "upload_id": upload_id}
     )
     return res.deleted_count > 0
+
+

@@ -7,6 +7,7 @@ class UploadPart(BaseModel):
     part_number: int
     etag: str
     size: int
+    file_id: str = ""
     data_path: Optional[str] = None
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"))
 

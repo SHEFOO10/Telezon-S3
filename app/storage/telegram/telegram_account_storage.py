@@ -26,9 +26,12 @@ class TelegramAccountStorage(Storage):
         )
 
     async def put_file(
-        self, file: bytes, filename: str, channel_id: str | int | None = None
+        self, file: bytes | str | io.BytesIO, filename: str, channel_id: str | int | None = None
     ) -> str:
-        document = io.BytesIO(file)
+        if isinstance(file, bytes):
+            document = io.BytesIO(file)
+        else:
+            document = file
 
         raw_cid = channel_id if channel_id is not None and str(channel_id).strip() else CID
         if not raw_cid:

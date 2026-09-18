@@ -51,3 +51,7 @@ if SESSION_STRING:
 
 INITIAL_ADMIN_USER = os.getenv("INITIAL_ADMIN_USER")
 INITIAL_ADMIN_PASSWORD = os.getenv("INITIAL_ADMIN_PASSWORD")
+
+# Multipart storage mode: "diskless" (default, direct Telegram part streaming) or "assembled" (temp disk assembly)
+MULTIPART_MODE = os.getenv("MULTIPART_MODE", "diskless").strip().lower()
+
